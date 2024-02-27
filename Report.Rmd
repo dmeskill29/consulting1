@@ -1,0 +1,219 @@
+---
+title: "Anxiety Metrics and Their Impact on Hippocampal Volume and Brain Connectivity"
+author: "Daniel Meskill"
+subtitle: "Client: Aysenil Belger"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  pdf_document: 
+    extra_dependencies: ["float"]
+  html_document:
+    df_print: paged
+  word_document: default
+abstract: |
+  This report investigates the relationship between anxiety metrics and measures of hippocampal volume and brain connectivity. Initial data analysis included handling missing values through imputation, removing outliers, and visualizing variable relationships with a correlation matrix. Subsequent modeling using multivariate linear and polynomial regression did not yield significant results. The findings indicate that the relationship between anxiety metrics and hippocampal volume and brain connectivity is complex and not easily captured by these regression forms. Further research with more advanced modeling techniques may be needed.
+---
+
+# Introduction
+
+Anxiety disorders are increasingly common and have been linked to changes in brain structures and functions. This study focuses on how anxiety levels correlate with hippocampal volume and brain connectivity. We investigate whether anxiety metrics can predict these measures. Understanding the relationship between anxiety and brain measures is important for advancing our knowledge of the neurological aspects of anxiety disorders.
+
+# Data Description
+
+The data was provided to me in a post-study CSV file (Marron_class_blocks.csv) for me to analyze. There were 131 subjects in the study, each with up to 18 measures. These measures are split into 3 blocks: 2 of which are for response variables, and 1 for explanatory variables. The first response block is for hippocampal volume (mm^3), with 1 measure for the left hemisphere and 1 for the right hemisphere. The second response block is made up of 12 measures related to functional connectivity. Functional connectivity is between two regions, for this study those are combinations of left and right hippocampus, amygdala, dorso-lateral prefrontal cortex, and ventro-medial prefrontal cortex. Higher values suggest stronger connectivity between the regions under stress. Lastly, the explanatory block includes 4 measures related to anxiety. Three are from the State-Trait Anxiety Inventory questionnaire, which consists of 40 self-report items on a 4-point Likert scale. The final measure is of MRI cortisol peak during an MRI session.
+
+# Data Exploration and Cleaning
+
+In this section I explore the data and do any appropriate cleaning/processing. 
+
+The first thing I noticed was that there were a decent amount of missing values. To be exact, there were 242 missing values over 56 subjects, of which 42 subjects were missing their peak cortisol level. Instead of discarding over a third of the subjects from our limited data, I chose to perform mean imputation to fill in the missing values. In mean imputation, the missing values in a dataset are replaced with the mean (average) of the available values for that particular variable. For example, if you have a dataset with a variable that has some missing values, you would calculate the average of all the non-missing values for that variable and then fill in the missing entries with this average.
+
+```{r, echo=FALSE, results='hide',warning=FALSE, include=FALSE}
+library(dplyr)
+library(corrplot)
+```
+
+```{r, echo=FALSE, results='hide', warning=FALSE}
+# Include your data cleaning code here
+
+data <- read.csv("C:/Users/danme/STOR765Project/Marron_class_blocks_remove_top_row.csv")
+data <- mutate(data,
+  STAITrait = as.numeric(STAITrait),
+  STAIStatePre = as.numeric(STAIStatePre),
+  STAIStatePost = as.numeric(STAIStatePost)
+)
+```
+
+```{r, echo=FALSE, results='hide'}
+# Getting an overview of the dataset Missing Data
+num_nas <- sum(is.na(data))
+num_nas
+num_rows_with_na <- sum(apply(data, 1, anyNA))
+num_rows_with_na
+num_nas_cortisol <- sum(is.na(data$MRI_Cortisol_Peak))
+num_nas_cortisol
+```
+
+```{r, echo=FALSE, results='hide'}
+# Mean imputation for numerical columns Mean Imputation
+for (col in names(data)) {
+  if (is.numeric(data[[col]])) {
+    data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+  }
+}
+```
+
+```{r, echo=FALSE, results='hide', fig.show='hold'}
+#Remove SUBJ column
+data <- data[, -1]
+```
+Then I chose to check the histograms for skewness. All of the explanatory variables looked good, for the most part. However, the cortisol peak histogram showed at least one outlier (see Figure 1). For this I chose to remove the subject since it might impact the analysis. 
+```{r, echo=FALSE, results='hide', fig.align='center', fig.cap='Histograms of the 4 predictor Variables that show not too much skewness and outliers', fig.show='hold'}
+par(mfrow = c(2, 2))
+# Produce histograms for the last four columns
+
+for (col in names(data[, 15:18])) {
+  hist(data[[col]], main = col, xlab = col)
+}
+par(mfrow = c(1, 1))
+```
+
+```{r, echo=FALSE, results='hide'}
+#Remove outlier
+data <- data[-15, ]
+```
+Next I explored the data through a correlation heat map (see Figure 2). This shows whether two variables are positively correlated (darker blue) or negatively correlated (darker red). The response variables are the first 14 variables and the explanatory variables are the last 4. From this figure we can conclude that although there are no signs of high collinearity, there also isn't much correlation between the explanatory and response variables. This foreshadows our results later. 
+```{r, echo=FALSE, results='hide', fig.align='center', fig.cap='Heat map of every Variable that shows not very strong correlations', fig.pos='H'}
+# Correlation matrix
+correlation_matrix <- cor(data)
+# Visualizing the correlation matrix
+corrplot(correlation_matrix,
+  method = "color",
+  tl.col = "black", tl.srt = 45, tl.cex = 0.6, cl.cex = 0.7, cl.ratio = 0.1
+)
+```
+
+```{r, echo=FALSE, results='hide'}
+#Split into two datasets
+dataresponse <- data[, 1:14]
+datapredictors <- data[, 15:18]
+```
+
+# Regression
+Then I moved on to modeling our data. I first applied a simple multivariate linear regression model for each response variable and found the following R-squared values (see Table 1). As a reminder, the 14 rows of this table correspond to the 14 response variables explained by the 4 predictor variables.
+
+```{r, echo=FALSE, results='hide'}
+#Linear regression
+results <- list()
+R_squareds <- as.matrix(data.frame(Model= 1:14,R_Squared=1:14))
+i <- 0
+
+
+for (response_col in names(dataresponse)) {
+  # Selecting the current column as response and the rest as predictors
+  datapredictors[, response_col] <- dataresponse[[response_col]]
+
+  # Running the linear regression
+  model <- lm(datapredictors[, 5] ~ STAITrait + STAIStatePre + STAIStatePost + MRI_Cortisol_Peak, data = datapredictors)
+
+  #print(summary(model))
+  i <- i+1
+  R_squareds[i,]<- c(response_col, summary(model)$r.squared)
+
+  # Storing the summary of the model
+  results[[response_col]] <- summary(model)
+
+  datapredictors <- datapredictors[, -5]
+}
+i<-0
+#as.data.frame(R_squareds)
+```
+| Response | R_Squared |
+|---------|---------|
+| HIPP_L_Volume_mm3 | 0.0406 | 
+| HIPP_R_Volume_mm3 | 0.0581 |
+| DLPFC_L.HIPP_L | 0.0149 | 
+| DLPFC_L.AMYG_L | 0.0129 |
+| DLPFC_L.vmPFC | 0.0362 | 
+| HIPP_L.AMYG_L | 0.0380 |
+| HIPP_L.vmPFC | 0.0180 | 
+| AMYG_L.vmPFC | 0.0059 |
+| DLPFC_R.HIPP_R | 0.0809 | 
+| DLPFC_R.AMYG_R | 0.0256 |
+| DLPFC_R.vmPFC | 0.0580 | 
+| HIPP_R.AMYG_R	 | 0.0040 |
+| HIPP_R.vmPFC	 | 0.0437 | 
+| AMYG_R.vmPFC	 | 0.0178 |
+
+\begin{center}
+Table 1: R-squared values for every model in linear regression showing weak relationships
+\end{center}
+
+R-squared is a measure of how much variability in the response variable can be explained by the predictor variables. Of the models the highest R-squared was about .08 while the lowest was .004. Quite honestly all of these models performed very poorly, suggesting there is not a linear model that fits the data well.
+
+I then went on to plot the residuals (see Figure 3) and conducted a Shapiro-Wilk test to look for leverage points for a specific response. From this we can conclude they look similar and show no departure from a normal distribution.
+
+```{r, echo=FALSE, results='hide', fig.cap='Residuals for the left hippocampal volume model showing no points of concern'}
+# Plotting the residuals
+plot(results[[1]]$residuals, main = "Residuals for HIPP_L_Volume_mm3", xlab = "Observation", ylab = "Residuals")
+abline(h = 0, col = "red")
+```
+
+```{r, echo=FALSE}
+# Shapiro-Wilk test for normality
+shapiro.test(results[[1]]$residuals)
+```
+
+Since the linear models did not reveal a good fit, I applied a quadratic regression model to see if it would yield better fit. The following table summarizes those R-squared results (see Table 2).
+
+```{r, echo=FALSE, results='hide'}
+#Try polynomial regression
+results2 <- list()
+R_squareds2 <- as.matrix(data.frame(Model= 1:14,R_Squared=1:14))
+i <- 0
+
+for (response_col in names(dataresponse)) {
+  # Selecting the current column as response and the rest as predictors
+  datapredictors[, response_col] <- dataresponse[[response_col]]
+
+  # Running the linear regression
+  model <- lm(datapredictors[, 5] ~ poly(STAITrait, STAIStatePre, STAIStatePost, MRI_Cortisol_Peak, degree = 2, raw = TRUE), data = datapredictors)
+
+  #print(summary(model))
+  i <- i+1
+  R_squareds2[i,]<- c(response_col, summary(model)$r.squared)
+
+  # Storing the summary of the model
+  results2[[response_col]] <- summary(model)
+
+  datapredictors <- datapredictors[, -5]
+}
+```
+| Response | R_Squared |
+|---------|---------|
+| HIPP_L_Volume_mm3 | 0.0945 | 
+| HIPP_R_Volume_mm3 | 0.0944 |
+| DLPFC_L.HIPP_L | 0.0953 | 
+| DLPFC_L.AMYG_L | 0.0641 |
+| DLPFC_L.vmPFC | 0.1466 | 
+| HIPP_L.AMYG_L | 0.1036 |
+| HIPP_L.vmPFC | 0.1343 | 
+| AMYG_L.vmPFC | 0.1101 |
+| DLPFC_R.HIPP_R | 0.1653 | 
+| DLPFC_R.AMYG_R | 0.0892 |
+| DLPFC_R.vmPFC | 0.2284 | 
+| HIPP_R.AMYG_R	 | 0.1099 |
+| HIPP_R.vmPFC	 | 0.1739 | 
+| AMYG_R.vmPFC	 | 0.1218 |
+
+\begin{center}
+Table 2: R-squared values for every model in quadratic Regression showing improvement in fit over linear models
+\end{center}
+
+This table shows significant improvement over the linear models, but still nothing too impressive for predicting each response.
+
+
+# Conclusion
+
+This study investigated the relationship between anxiety metrics and brain-related measures, specifically hippocampal volume and brain connectivity. Despite the data exploration and cleaning processes, and the application of both multivariate linear and polynomial regression analyses, the results did not reveal statistically significant relationships. The low R-squared values in linear regression models, along with only significant improvements in polynomial regression, indicate that any potential relationship between anxiety metrics and the chosen brain measures might be more intricate than initially hypothesized.
+
+The complexity of the brain's response to anxiety, coupled with the limitations of the modeling techniques used, suggests that this field warrants further investigation with more sophisticated models. Future research might benefit from integrating more comprehensive data, considering non-linear models, or employing machine learning techniques that can capture more nuanced relationships within such complex biological data. Additionally, exploring other potential mediating or moderating variables could provide deeper insights into the intricate dynamics between anxiety and brain structure and function.

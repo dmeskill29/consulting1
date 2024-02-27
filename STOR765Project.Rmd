@@ -1,0 +1,93 @@
+Packages
+```{r}
+library(dplyr)
+library(corrplot)
+```
+Data Cleaning
+```{r}
+data <- read.csv("C:/Users/danme/STOR765Project/Marron_class_blocks_remove_top_row.csv")
+data <- mutate(data, STAITrait = as.numeric(STAITrait), STAIStatePre = as.numeric(STAIStatePre), STAIStatePost = as.numeric(STAIStatePost))
+
+# Mean imputation for numerical columns
+for (col in names(data)) {
+  if (is.numeric(data[[col]])) {
+    data[[col]][is.na(data[[col]])] <- mean(data[[col]], na.rm = TRUE)
+  }
+}
+#remove subject id
+data <- data[,-1]
+#remove outlier
+data <- data[-15,]
+
+#split data
+dataresponse <- data[,1:14]
+datapredictors <- data[,15:18]
+
+
+
+```
+Plots of response vs predictor
+```{r}
+plot(datapredictors[,1],dataresponse[,3])
+```
+
+Summary
+```{r}
+# Getting an overview of the dataset
+summary(data)
+```
+```{r}
+# Assuming 'data' is your dataframe
+
+# Create a boxplot for each numerical variable in the dataframe
+par(mar=c(2, 2, 2, 2)) # Arrange plots in a grid
+for (var in names(data)) {
+  if (is.numeric(data[[var]])) {
+    boxplot(data[[var]], main=var, ylab="Values", col="lightblue")
+  }
+}
+
+```
+
+Correlation Heat Map
+```{r}
+# Correlation matrix
+correlation_matrix <- cor(data, use="complete.obs")
+
+# Visualizing the correlation matrix
+corrplot(correlation_matrix, method="color",
+         tl.col="black", tl.srt=45, tl.cex=0.6, cl.cex=0.7, cl.ratio=0.1)
+
+```
+Histograms
+```{r}
+# Assuming 'data' is your dataframe
+
+# Create a histogram for each numerical variable in the dataframe
+for (var in names(data)) {
+  if (is.numeric(data[[var]])) {
+    hist(data[[var]], main=paste("Histogram of", var), xlab=var, col="blue")
+  }
+}
+```
+```{r}
+# Assuming 'data' is your DataFrame
+results <- list()
+
+for (response_col in names(dataresponse)) {
+  # Selecting the current column as response and the rest as predictors
+  datapredictors[,response_col] <- dataresponse[[response_col]]
+
+  # Running the linear regression
+  model <- lm(datapredictors[,5] ~ STAITrait+STAIStatePre+STAIStatePost+MRI_Cortisol_Peak, data = datapredictors)
+
+  print(summary(model))
+  
+  # Storing the summary of the model
+  results[[response_col]] <- summary(model)
+  
+  datapredictors <- datapredictors[,-5]
+}
+
+```
+
